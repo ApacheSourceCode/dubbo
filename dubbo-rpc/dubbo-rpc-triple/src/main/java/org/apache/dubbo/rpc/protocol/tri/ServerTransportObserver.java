@@ -19,6 +19,7 @@ package org.apache.dubbo.rpc.protocol.tri;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
@@ -27,14 +28,16 @@ import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 
 public class ServerTransportObserver implements TransportObserver {
     private final ChannelHandlerContext ctx;
+    private final ChannelPromise promise;
     private boolean headerSent = false;
 
-    public ServerTransportObserver(ChannelHandlerContext ctx) {
+    public ServerTransportObserver(ChannelHandlerContext ctx, ChannelPromise promise) {
         this.ctx = ctx;
+        this.promise = promise;
     }
 
     @Override
-    public void onMetadata(Metadata metadata, boolean endStream, Stream.OperationHandler handler) {
+    public void onMetadata(Metadata metadata, boolean endStream) {
         final DefaultHttp2Headers headers = new DefaultHttp2Headers(true);
         metadata.forEach(e -> {
             headers.set(e.getKey(), e.getValue());
@@ -43,22 +46,21 @@ public class ServerTransportObserver implements TransportObserver {
             headerSent = true;
             headers.status(OK.codeAsText());
             headers.set(TripleHeaderEnum.CONTENT_TYPE_KEY.getHeader(), TripleConstant.CONTENT_PROTO);
-            ctx.writeAndFlush(new DefaultHttp2HeadersFrame(headers, endStream));
-        } else {
-            ctx.writeAndFlush(new DefaultHttp2HeadersFrame(headers, endStream));
         }
+        ctx.writeAndFlush(new DefaultHttp2HeadersFrame(headers, endStream))
+            .addListener(future -> {
+                if (!future.isSuccess()) {
+                    promise.tryFailure(future.cause());
+                }
+            });
     }
 
     @Override
-    public void onData(byte[] data, boolean endStream, Stream.OperationHandler handler) {
+    public void onData(byte[] data, boolean endStream) {
         ByteBuf buf = ctx.alloc().buffer();
         buf.writeByte(0);
         buf.writeInt(data.length);
         buf.writeBytes(data);
         ctx.writeAndFlush(new DefaultHttp2DataFrame(buf, false));
-    }
-
-    @Override
-    public void onComplete(Stream.OperationHandler handler) {
     }
 }
