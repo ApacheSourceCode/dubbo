@@ -25,10 +25,8 @@ public interface TransportObserver {
 
     void onData(byte[] data, boolean endStream);
 
-    default void onReset(Http2Error http2Error) {
-    }
+    void onReset(Http2Error http2Error);
 
-    default void onComplete() {
-    }
+    void onComplete();
 
 }

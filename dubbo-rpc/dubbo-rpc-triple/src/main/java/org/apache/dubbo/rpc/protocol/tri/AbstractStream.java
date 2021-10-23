@@ -25,11 +25,9 @@ import org.apache.dubbo.common.threadpool.manager.ExecutorRepository;
 import org.apache.dubbo.common.threadpool.serial.SerializingExecutor;
 import org.apache.dubbo.common.utils.StringUtils;
 import org.apache.dubbo.config.Constants;
-import org.apache.dubbo.remoting.exchange.Request;
 import org.apache.dubbo.rpc.CancellationContext;
 import org.apache.dubbo.rpc.RpcContext;
 import org.apache.dubbo.rpc.model.MethodDescriptor;
-import org.apache.dubbo.rpc.model.ServiceDescriptor;
 import org.apache.dubbo.rpc.protocol.tri.GrpcStatus.Code;
 
 import com.google.protobuf.Any;
@@ -51,28 +49,22 @@ public abstract class AbstractStream implements Stream {
     private final StreamObserver<Object> streamObserver;
     private final TransportObserver transportObserver;
     private final Executor executor;
-    private ServiceDescriptor serviceDescriptor;
+    private final CancellationContext cancellationContext;
+    // AcceptEncoding does not change after the application is started,
+    // so it can be obtained when constructing the stream
+    private final String acceptEncoding;
+
     private MethodDescriptor methodDescriptor;
     private String methodName;
-    private Request request;
     private String serializeType;
     private StreamObserver<Object> streamSubscriber;
-    private TransportObserver transportSubscriber;
+    private AbstractChannelTransportObserver transportSubscriber;
     private Compressor compressor = IdentityCompressor.NONE;
-
-    private final CancellationContext cancellationContext;
+    private Compressor deCompressor = IdentityCompressor.NONE;
     private volatile boolean cancelled = false;
-
-    public boolean isCancelled() {
-        return cancelled;
-    }
 
     protected AbstractStream(URL url) {
         this(url, null);
-    }
-
-    protected CancellationContext getCancellationContext() {
-        return cancellationContext;
     }
 
     protected AbstractStream(URL url, Executor executor) {
@@ -81,12 +73,12 @@ public abstract class AbstractStream implements Stream {
         this.executor = wrapperSerializingExecutor(sourceExecutor);
         final String value = url.getParameter(Constants.MULTI_SERIALIZATION_KEY, CommonConstants.DEFAULT_KEY);
         this.multipleSerialization = url.getOrDefaultFrameworkModel().getExtensionLoader(MultipleSerialization.class)
-                .getExtension(value);
+            .getExtension(value);
         this.cancellationContext = new CancellationContext();
         this.transportObserver = createTransportObserver();
         this.streamObserver = createStreamObserver();
+        this.acceptEncoding = Compressor.getAcceptEncoding(getUrl().getOrDefaultFrameworkModel());
     }
-
 
     private Executor lookupExecutor(URL url, Executor executor) {
         // only server maybe not null
@@ -94,8 +86,8 @@ public abstract class AbstractStream implements Stream {
             return executor;
         }
         ExecutorRepository executorRepository = url.getOrDefaultApplicationModel()
-                .getExtensionLoader(ExecutorRepository.class)
-                .getDefaultExtension();
+            .getExtensionLoader(ExecutorRepository.class)
+            .getDefaultExtension();
         Executor urlExecutor = executorRepository.getExecutor(url);
         if (urlExecutor == null) {
             urlExecutor = executorRepository.createExecutorIfAbsent(url);
@@ -107,13 +99,20 @@ public abstract class AbstractStream implements Stream {
         return new SerializingExecutor(executor);
     }
 
-    public Request getRequest() {
-        return request;
+    public String getAcceptEncoding() {
+        return acceptEncoding;
     }
 
-    public AbstractStream request(Request request) {
-        this.request = request;
-        return this;
+    public TransportState getState() {
+        return transportSubscriber.state;
+    }
+
+    public boolean isCancelled() {
+        return cancelled;
+    }
+
+    protected CancellationContext getCancellationContext() {
+        return cancellationContext;
     }
 
     @Override
@@ -132,6 +131,7 @@ public abstract class AbstractStream implements Stream {
 
     public AbstractStream method(MethodDescriptor md) {
         this.methodDescriptor = md;
+        this.methodName = md.getMethodName();
         return this;
     }
 
@@ -164,8 +164,14 @@ public abstract class AbstractStream implements Stream {
 
     protected abstract void cancelByLocal(Throwable throwable);
 
+    /**
+     * create request StreamObserver
+     */
     protected abstract StreamObserver<Object> createStreamObserver();
 
+    /**
+     * create response TransportObserver
+     */
     protected abstract TransportObserver createTransportObserver();
 
     public String getSerializeType() {
@@ -173,8 +179,8 @@ public abstract class AbstractStream implements Stream {
     }
 
     public AbstractStream serialize(String serializeType) {
-        if ("hessian4".equals(serializeType)) {
-            serializeType = "hessian2";
+        if (TripleConstant.HESSIAN4.equals(serializeType)) {
+            serializeType = TripleConstant.HESSIAN2;
         }
         this.serializeType = serializeType;
         return this;
@@ -196,21 +202,47 @@ public abstract class AbstractStream implements Stream {
         return methodDescriptor;
     }
 
-    public ServiceDescriptor getServiceDescriptor() {
-        return serviceDescriptor;
+    public Compressor getCompressor() {
+        return this.compressor;
     }
 
-    public void setServiceDescriptor(ServiceDescriptor serviceDescriptor) {
-        this.serviceDescriptor = serviceDescriptor;
-    }
-
+    /**
+     * set compressor if required
+     *
+     * @param compressor {@link Compressor}
+     */
     protected AbstractStream setCompressor(Compressor compressor) {
-        this.compressor = compressor;
+        // If compressor is NULL, this will not be set.
+        // Consider whether to throw an exception or handle silently,
+        // But now choose silent processing, Fall back to default.
+        if (compressor != null) {
+            this.compressor = compressor;
+        } else {
+            if (LOGGER.isErrorEnabled()) {
+                LOGGER.error("Compressor is Null, Fall back to default compression." +
+                    " MessageEncoding is " + getCompressor().getMessageEncoding());
+            }
+        }
         return this;
     }
 
-    public Compressor getCompressor() {
-        return this.compressor;
+    public Compressor getDeCompressor() {
+        return this.deCompressor;
+    }
+
+    protected AbstractStream setDeCompressor(Compressor compressor) {
+        // If compressor is NULL, this will not be set.
+        // Consider whether to throw an exception or handle silently,
+        // But now choose silent processing, Fall back to default.
+        if (compressor != null) {
+            this.deCompressor = compressor;
+        } else {
+            if (LOGGER.isErrorEnabled()) {
+                LOGGER.error("Compressor is Null, Fall back to default deCompression." +
+                    " MessageEncoding is " + getDeCompressor().getMessageEncoding());
+            }
+        }
+        return this;
     }
 
     public URL getUrl() {
@@ -223,7 +255,7 @@ public abstract class AbstractStream implements Stream {
     }
 
     @Override
-    public void subscribe(TransportObserver observer) {
+    public void subscribe(AbstractChannelTransportObserver observer) {
         this.transportSubscriber = observer;
     }
 
@@ -251,8 +283,8 @@ public abstract class AbstractStream implements Stream {
         }
         getTransportSubscriber().onMetadata(trailers, true);
         if (LOGGER.isErrorEnabled()) {
-            LOGGER.error("[Triple-Server-Error] status=" + status.code.code + " service=" + getServiceDescriptor().getServiceName()
-                    + " method=" + getMethodName() + " onlyTrailers=" + onlyTrailers, status.cause);
+            LOGGER.error("[Triple-Error] status=" + status.code.code
+                + " method=" + getMethodName() + " onlyTrailers=" + onlyTrailers, status.cause);
         }
     }
 
@@ -284,24 +316,24 @@ public abstract class AbstractStream implements Stream {
         metadata.put(TripleHeaderEnum.MESSAGE_KEY.getHeader(), getGrpcMessage(grpcStatus));
         metadata.put(TripleHeaderEnum.STATUS_KEY.getHeader(), String.valueOf(grpcStatus.code.code));
         Status.Builder builder = Status.newBuilder()
-                .setCode(grpcStatus.code.code)
-                .setMessage(getGrpcMessage(grpcStatus));
+            .setCode(grpcStatus.code.code)
+            .setMessage(getGrpcMessage(grpcStatus));
         Throwable throwable = grpcStatus.cause;
         if (throwable == null) {
             Status status = builder.build();
             metadata.put(TripleHeaderEnum.STATUS_DETAIL_KEY.getHeader(),
-                    TripleUtil.encodeBase64ASCII(status.toByteArray()));
+                TripleUtil.encodeBase64ASCII(status.toByteArray()));
             return metadata;
         }
         DebugInfo debugInfo = DebugInfo.newBuilder()
-                .addAllStackEntries(ExceptionUtils.getStackFrameList(throwable, 10))
-                // can not use now
-                // .setDetail(throwable.getMessage())
-                .build();
+            .addAllStackEntries(ExceptionUtils.getStackFrameList(throwable, 10))
+            // can not use now
+            // .setDetail(throwable.getMessage())
+            .build();
         builder.addDetails(Any.pack(debugInfo));
         Status status = builder.build();
         metadata.put(TripleHeaderEnum.STATUS_DETAIL_KEY.getHeader(),
-                TripleUtil.encodeBase64ASCII(status.toByteArray()));
+            TripleUtil.encodeBase64ASCII(status.toByteArray()));
         return metadata;
     }
 
@@ -316,7 +348,7 @@ public abstract class AbstractStream implements Stream {
             if (TripleHeaderEnum.containsExcludeAttachments(key)) {
                 continue;
             }
-            if (key.endsWith("-bin") && key.length() > 4) {
+            if (key.endsWith(TripleConstant.GRPC_BIN_SUFFIX) && key.length() > 4) {
                 try {
                     attachments.put(key.substring(0, key.length() - 4), TripleUtil.decodeASCIIByte(header.getValue()));
                 } catch (Exception e) {
@@ -330,6 +362,9 @@ public abstract class AbstractStream implements Stream {
     }
 
     protected void convertAttachment(Metadata metadata, Map<String, Object> attachments) {
+        if (attachments == null) {
+            return;
+        }
         for (Map.Entry<String, Object> entry : attachments.entrySet()) {
             final String key = entry.getKey().toLowerCase(Locale.ROOT);
             if (Http2Headers.PseudoHeaderName.isPseudoHeader(key)) {
@@ -343,6 +378,13 @@ public abstract class AbstractStream implements Stream {
         }
     }
 
+    /**
+     * Convert each user's attach value to metadata
+     *
+     * @param metadata {@link Metadata}
+     * @param key      metadata key
+     * @param v        metadata value (Metadata Only string and byte arrays are allowed)
+     */
     private void convertSingleAttachment(Metadata metadata, String key, Object v) {
         try {
             if (v instanceof String) {
@@ -350,7 +392,7 @@ public abstract class AbstractStream implements Stream {
                 metadata.put(key, str);
             } else if (v instanceof byte[]) {
                 String str = TripleUtil.encodeBase64ASCII((byte[]) v);
-                metadata.put(key + "-bin", str);
+                metadata.put(key + TripleConstant.GRPC_BIN_SUFFIX, str);
             }
         } catch (Throwable t) {
             LOGGER.warn("Meet exception when convert single attachment key:" + key + " value=" + v, t);
@@ -362,7 +404,7 @@ public abstract class AbstractStream implements Stream {
     }
 
     protected byte[] decompress(byte[] data) {
-        return this.getCompressor().decompress(data);
+        return this.getDeCompressor().decompress(data);
     }
 
     protected abstract class AbstractTransportObserver implements TransportObserver {
@@ -379,7 +421,10 @@ public abstract class AbstractStream implements Stream {
 
         @Override
         public void onReset(Http2Error http2Error) {
-            getTransportSubscriber().onReset(http2Error);
+            if (getState().allowSendReset()) {
+                getState().setResetSend();
+                getTransportSubscriber().onReset(http2Error);
+            }
         }
 
         @Override
@@ -421,14 +466,19 @@ public abstract class AbstractStream implements Stream {
 
         @Override
         public void onComplete() {
-            final GrpcStatus status = extractStatusFromMeta(getHeaders());
-            if (Code.isOk(status.code.code)) {
-                doOnComplete();
-            } else {
-                onError(status);
-            }
+            execute(() -> {
+                final GrpcStatus status = extractStatusFromMeta(getHeaders());
+                if (Code.isOk(status.code.code)) {
+                    doOnComplete();
+                } else {
+                    onError(status);
+                }
+            });
         }
 
+        /**
+         * This method exception needs to be caught by the implementation class
+         */
         protected abstract void doOnComplete();
 
 
@@ -438,7 +488,7 @@ public abstract class AbstractStream implements Stream {
                 this.data = in;
             } else {
                 onError(GrpcStatus.fromCode(GrpcStatus.Code.INTERNAL)
-                        .withDescription(DUPLICATED_DATA));
+                    .withDescription(DUPLICATED_DATA));
             }
         }
     }

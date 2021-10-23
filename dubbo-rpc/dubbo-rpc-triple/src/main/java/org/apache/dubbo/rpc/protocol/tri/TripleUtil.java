@@ -28,15 +28,6 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.rpc.DebugInfo;
 import com.google.rpc.ErrorInfo;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
-import io.netty.handler.codec.http2.DefaultHttp2Headers;
-import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
-import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.util.AttributeKey;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -52,17 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static io.netty.handler.codec.http.HttpResponseStatus.OK;
-
 public class TripleUtil {
-
-    public static final AttributeKey<AbstractServerStream> SERVER_STREAM_KEY = AttributeKey.newInstance(
-        "tri_server_stream");
-    public static final AttributeKey<AbstractClientStream> CLIENT_STREAM_KEY = AttributeKey.newInstance(
-        "tri_client_stream");
-    public static final AttributeKey<Compressor> COMPRESSOR_KEY = AttributeKey.newInstance(
-        "tri_compressor");
-    public static final String LANGUAGE = "java";
     // Some exceptions are not very useful and add too much noise to the log
     private static final Set<String> QUIET_EXCEPTIONS = new HashSet<>();
     private static final Set<Class<?>> QUIET_EXCEPTIONS_CLASS = new HashSet<>();
@@ -79,60 +60,7 @@ public class TripleUtil {
         if (QUIET_EXCEPTIONS_CLASS.contains(t.getClass())) {
             return true;
         }
-        if (QUIET_EXCEPTIONS.contains(t.getClass().getSimpleName())) {
-            return true;
-        }
-        return false;
-    }
-
-    public static AbstractServerStream getServerStream(ChannelHandlerContext ctx) {
-        return ctx.channel().attr(TripleUtil.SERVER_STREAM_KEY).get();
-    }
-
-    public static AbstractClientStream getClientStream(ChannelHandlerContext ctx) {
-        return ctx.channel().attr(TripleUtil.CLIENT_STREAM_KEY).get();
-    }
-
-    public static Compressor getCompressor(ChannelHandlerContext ctx) {
-        return ctx.channel().attr(COMPRESSOR_KEY).get();
-    }
-
-    public static int calcCompressFlag(ChannelHandlerContext ctx) {
-        Compressor compressor = getCompressor(ctx);
-        if (null == compressor || IdentityCompressor.NONE.equals(compressor)) {
-            return 0;
-        }
-        return 1;
-    }
-
-    /**
-     * must starts from application/grpc
-     */
-    public static boolean supportContentType(String contentType) {
-        if (contentType == null) {
-            return false;
-        }
-        return contentType.startsWith(TripleConstant.APPLICATION_GRPC);
-    }
-
-    public static void responseErr(ChannelHandlerContext ctx, GrpcStatus status) {
-        Http2Headers trailers = new DefaultHttp2Headers()
-            .status(OK.codeAsText())
-            .set(HttpHeaderNames.CONTENT_TYPE, TripleConstant.CONTENT_PROTO)
-            .setInt(TripleHeaderEnum.STATUS_KEY.getHeader(), status.code.code)
-            .set(TripleHeaderEnum.MESSAGE_KEY.getHeader(), status.toMessage());
-        ctx.writeAndFlush(new DefaultHttp2HeadersFrame(trailers, true));
-    }
-
-    public static void responsePlainTextError(ChannelHandlerContext ctx, int code, GrpcStatus status) {
-        Http2Headers headers = new DefaultHttp2Headers(true)
-            .status("" + code)
-            .setInt(TripleHeaderEnum.STATUS_KEY.getHeader(), status.code.code)
-            .set(TripleHeaderEnum.MESSAGE_KEY.getHeader(), status.description)
-            .set(TripleHeaderEnum.CONTENT_TYPE_KEY.getHeader(), "text/plain; encoding=utf-8");
-        ctx.write(new DefaultHttp2HeadersFrame(headers));
-        ByteBuf buf = ByteBufUtil.writeUtf8(ctx.alloc(), status.description);
-        ctx.write(new DefaultHttp2DataFrame(buf, true));
+        return QUIET_EXCEPTIONS.contains(t.getClass().getSimpleName());
     }
 
     public static Object unwrapResp(URL url, TripleWrapper.TripleResponseWrapper wrap,
@@ -198,44 +126,6 @@ public class TripleUtil {
             return builder.build();
         } catch (IOException e) {
             throw new RuntimeException("Failed to pack wrapper req", e);
-        }
-    }
-
-    public static TripleWrapper.TripleExceptionWrapper wrapException(URL url, Throwable throwable,
-                                                                     String serializeType,
-                                                                     MultipleSerialization serialization) {
-        try {
-            final TripleWrapper.TripleExceptionWrapper.Builder builder = TripleWrapper.TripleExceptionWrapper.newBuilder()
-                .setLanguage(LANGUAGE)
-                .setClassName(throwable.getClass().getName())
-                .setSerialization(serializeType);
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            serialization.serialize(url, serializeType, builder.getClassName(), throwable, bos);
-            builder.setData(ByteString.copyFrom(bos.toByteArray()));
-            bos.close();
-            return builder.build();
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to pack wrapper exception", e);
-        }
-    }
-
-    public static Throwable unWrapException(URL url, TripleWrapper.TripleExceptionWrapper wrap,
-                                            String serializeType,
-                                            MultipleSerialization serialization) {
-        if (wrap == null) {
-            return null;
-        }
-        if (!LANGUAGE.equals(wrap.getLanguage())) {
-            return null;
-        }
-        try {
-            final ByteArrayInputStream bais = new ByteArrayInputStream(wrap.getData().toByteArray());
-            Object obj = serialization.deserialize(url, serializeType, wrap.getClassName(), bais);
-            bais.close();
-            return (Throwable) obj;
-        } catch (Exception e) {
-            // if this null ,can get common exception
-            return null;
         }
     }
 
@@ -346,26 +236,17 @@ public class TripleUtil {
     }
 
     public static String convertHessianToWrapper(String serializeType) {
-        if ("hessian2".equals(serializeType)) {
-            return "hessian4";
+        if (TripleConstant.HESSIAN2.equals(serializeType)) {
+            return TripleConstant.HESSIAN4;
         }
         return serializeType;
     }
 
     public static String convertHessianFromWrapper(String serializeType) {
-        if ("hessian4".equals(serializeType)) {
-            return "hessian2";
+        if (TripleConstant.HESSIAN4.equals(serializeType)) {
+            return TripleConstant.HESSIAN2;
         }
         return serializeType;
-    }
-
-    public static String calcAcceptEncoding(URL url) {
-        Set<String> supportedEncodingSet = url.getOrDefaultApplicationModel().getExtensionLoader(Compressor.class).getSupportedExtensions();
-        if (supportedEncodingSet.isEmpty()) {
-            return null;
-        }
-
-        return String.join(",", supportedEncodingSet);
     }
 
 }
