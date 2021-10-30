@@ -41,33 +41,33 @@ public class UnaryServerStream extends AbstractServerStream implements Stream {
     }
 
     @Override
-    protected TransportObserver createTransportObserver() {
+    protected InboundTransportObserver createInboundTransportObserver() {
         return new UnaryServerTransportObserver();
     }
 
-    private class UnaryServerTransportObserver extends UnaryTransportObserver implements TransportObserver {
+    private class UnaryServerTransportObserver extends ServerUnaryInboundTransportObserver implements TransportObserver {
         @Override
-        protected void onError(GrpcStatus status) {
+        public void onError(GrpcStatus status) {
             transportError(status);
         }
 
         @Override
-        public void doOnComplete() {
-            if (getData() != null) {
-                invoke();
-            } else {
-                onError(GrpcStatus.fromCode(GrpcStatus.Code.INTERNAL)
-                    .withDescription("Missing request data"));
-            }
+        public void onComplete() {
+            execute(() -> {
+                if (getData() != null) {
+                    invoke();
+                } else {
+                    onError(GrpcStatus.fromCode(GrpcStatus.Code.INTERNAL)
+                        .withDescription("Missing request data"));
+                }
+            });
         }
 
         public void invoke() {
-            RpcInvocation invocation = buildInvocation(getHeaders());
-            final Object[] arguments = deserializeRequest(getData());
-            if (arguments == null) {
+            RpcInvocation invocation = buildUnaryInvocation(getHeaders(), getData());
+            if (invocation == null) {
                 return;
             }
-            invocation.setArguments(arguments);
             final Result result = getInvoker().invoke(invocation);
             CompletionStage<Object> future = result.thenApply(Function.identity());
             future.whenComplete((o, throwable) -> {
@@ -82,15 +82,16 @@ public class UnaryServerStream extends AbstractServerStream implements Stream {
                     return;
                 }
                 Metadata metadata = createResponseMeta();
-                getTransportSubscriber().onMetadata(metadata, false);
+                outboundTransportObserver().onMetadata(metadata, false);
                 final byte[] data = encodeResponse(response.getValue());
                 if (data == null) {
+                    // already handled in encodeResponse()
                     return;
                 }
-                getTransportSubscriber().onData(data, false);
-                Metadata trailers = TripleConstant.SUCCESS_RESPONSE_META;
+                outboundTransportObserver().onData(data, false);
+                Metadata trailers = TripleConstant.getSuccessResponseMeta();
                 convertAttachment(trailers, response.getObjectAttachments());
-                getTransportSubscriber().onMetadata(trailers, true);
+                outboundTransportObserver().onMetadata(trailers, true);
             });
             RpcContext.removeContext();
         }
