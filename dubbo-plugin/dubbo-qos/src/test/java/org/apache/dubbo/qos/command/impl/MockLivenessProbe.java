@@ -14,28 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.dubbo.common.extension.ext6_wrap.impl;
+package org.apache.dubbo.qos.command.impl;
 
-import org.apache.dubbo.common.URL;
-import org.apache.dubbo.common.extension.ext6_wrap.WrappedExt;
-import org.apache.dubbo.common.extension.ext6_wrap.WrappedExtWrapper;
+import org.apache.dubbo.common.extension.Activate;
+import org.apache.dubbo.qos.probe.LivenessProbe;
 
-import java.util.concurrent.atomic.AtomicInteger;
+@Activate
+public class MockLivenessProbe implements LivenessProbe {
+    private static boolean checkReturnValue = false;
 
-public class Ext5Wrapper2 implements WrappedExt, WrappedExtWrapper {
-    public static AtomicInteger echoCount = new AtomicInteger();
-    WrappedExt origin;
-
-    public Ext5Wrapper2(WrappedExt origin) {
-        this.origin = origin;
+    @Override
+    public boolean check() {
+        return checkReturnValue;
     }
 
-    public String echo(URL url, String s) {
-        echoCount.incrementAndGet();
-        return origin.echo(url, s);
-    }
-
-    public WrappedExt getOrigin() {
-        return origin;
+    public static void setCheckReturnValue(boolean checkReturnValue) {
+        MockLivenessProbe.checkReturnValue = checkReturnValue;
     }
 }

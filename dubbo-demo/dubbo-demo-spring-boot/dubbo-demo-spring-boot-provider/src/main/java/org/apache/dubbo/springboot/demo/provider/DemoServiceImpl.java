@@ -14,13 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.dubbo.common.extension.ext6_wrap.impl;
+package org.apache.dubbo.springboot.demo.provider;
 
-import org.apache.dubbo.common.URL;
-import org.apache.dubbo.common.extension.ext6_wrap.WrappedExt;
 
-public class Ext5Impl1 implements WrappedExt {
-    public String echo(URL url, String s) {
-        return "Ext5Impl1-echo";
+import org.apache.dubbo.config.annotation.DubboService;
+import org.apache.dubbo.rpc.RpcContext;
+import org.apache.dubbo.springboot.demo.DemoService;
+
+@DubboService
+public class DemoServiceImpl implements DemoService {
+
+    @Override
+    public String sayHello(String name) {
+        System.out.println("Hello " + name + ", request from consumer: " + RpcContext.getContext().getRemoteAddress());
+        return "Hello " + name;
     }
+
+
 }

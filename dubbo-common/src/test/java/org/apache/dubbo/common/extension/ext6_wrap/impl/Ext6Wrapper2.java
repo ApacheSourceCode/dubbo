@@ -22,11 +22,11 @@ import org.apache.dubbo.common.extension.ext6_wrap.WrappedExtWrapper;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class Ext5Wrapper1 implements WrappedExt, WrappedExtWrapper {
+public class Ext6Wrapper2 implements WrappedExt, WrappedExtWrapper {
     public static AtomicInteger echoCount = new AtomicInteger();
     WrappedExt origin;
 
-    public Ext5Wrapper1(WrappedExt origin) {
+    public Ext6Wrapper2(WrappedExt origin) {
         this.origin = origin;
     }
 
@@ -35,7 +35,6 @@ public class Ext5Wrapper1 implements WrappedExt, WrappedExtWrapper {
         return origin.echo(url, s);
     }
 
-    @Override
     public WrappedExt getOrigin() {
         return origin;
     }
