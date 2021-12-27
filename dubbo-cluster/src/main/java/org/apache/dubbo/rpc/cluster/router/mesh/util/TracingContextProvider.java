@@ -14,28 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.dubbo.common.json;
+package org.apache.dubbo.rpc.cluster.router.mesh.util;
 
-public class MyException extends Exception {
+import org.apache.dubbo.common.extension.ExtensionScope;
+import org.apache.dubbo.common.extension.SPI;
+import org.apache.dubbo.rpc.Invocation;
 
-    private static final long serialVersionUID = 2905707783883694687L;
+/**
+ * SPI to get tracing context from 3rd-party tracing utils ( e.g. OpenTracing )
+ */
+@SPI(scope = ExtensionScope.APPLICATION)
+public interface TracingContextProvider {
 
-    private String code;
-
-    public MyException() {
-    }
-
-    public MyException(String code, String message) {
-        super(message);
-        this.code = code;
-    }
-
-    public String getCode() {
-        return code;
-    }
-
-    public void setCode(String code) {
-        this.code = code;
-    }
-
+    /**
+     * Get value from context
+     *
+     * @param invocation invocation
+     * @param key key of value
+     * @return value (null if absent)
+     */
+    String getValue(Invocation invocation, String key);
 }

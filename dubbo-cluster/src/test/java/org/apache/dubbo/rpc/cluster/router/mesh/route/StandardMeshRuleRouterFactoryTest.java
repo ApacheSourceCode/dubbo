@@ -15,11 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.dubbo.rpc.cluster.router.mesh.util;
+package org.apache.dubbo.rpc.cluster.router.mesh.route;
+
+import org.apache.dubbo.common.URL;
+
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 
-import org.apache.dubbo.rpc.cluster.router.mesh.rule.VsDestinationGroup;
+public class StandardMeshRuleRouterFactoryTest {
 
-public interface VsDestinationGroupRuleListener {
-    void onRuleChange(VsDestinationGroup vsDestinationGroup);
+    @Test
+    public void getRouter() {
+        StandardMeshRuleRouterFactory ruleRouterFactory = new StandardMeshRuleRouterFactory();
+        Assertions.assertTrue(ruleRouterFactory.getRouter(Object.class, URL.valueOf("")) instanceof StandardMeshRuleRouter);
+    }
 }

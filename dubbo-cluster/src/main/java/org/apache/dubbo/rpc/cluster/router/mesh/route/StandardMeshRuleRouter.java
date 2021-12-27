@@ -14,20 +14,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.dubbo.common.json;
+package org.apache.dubbo.rpc.cluster.router.mesh.route;
 
-/**
- * ParseException.
- */
-@Deprecated
-public class ParseException extends Exception {
-    private static final long serialVersionUID = 8611884051738966316L;
+import org.apache.dubbo.common.URL;
 
-    public ParseException() {
-        super();
+import static org.apache.dubbo.rpc.cluster.router.mesh.route.MeshRuleConstants.STANDARD_ROUTER_KEY;
+
+public class StandardMeshRuleRouter<T> extends MeshRuleRouter<T> {
+
+    public StandardMeshRuleRouter(URL url) {
+        super(url);
     }
 
-    public ParseException(String message) {
-        super(message);
+    @Override
+    public String ruleSuffix() {
+        return STANDARD_ROUTER_KEY;
+    }
+
+    @Override
+    public boolean isForce() {
+        return false;
+    }
+
+    @Override
+    public int getPriority() {
+        return -500;
     }
 }
