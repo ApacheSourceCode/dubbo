@@ -217,10 +217,6 @@ public interface CommonConstants {
 
     String METADATA_KEY = "metadata-type";
 
-    String CONFIG_MAPPING_TYPE = "config";
-
-    String METADATA_MAPPING_TYPE = "metadata";
-
     String DEFAULT_METADATA_STORAGE_TYPE = "local";
 
     String REMOTE_METADATA_STORAGE_TYPE = "remote";
@@ -507,7 +503,17 @@ public interface CommonConstants {
     String DUBBO_INTERNAL_APPLICATION = "DUBBO_INTERNAL_APPLICATION";
 
     String RETRY_TIMES_KEY = "retry-times";
+
     String RETRY_PERIOD_KEY = "retry-period";
+
     String SYNC_REPORT_KEY = "sync-report";
+
     String CYCLE_REPORT_KEY = "cycle-report";
+
+    String WORKING_CLASSLOADER_KEY = "WORKING_CLASSLOADER";
+
+    String STAGED_CLASSLOADER_KEY = "STAGED_CLASSLOADER";
+
+    String PROVIDER_ASYNC_KEY = "PROVIDER_ASYNC";
+
 }
