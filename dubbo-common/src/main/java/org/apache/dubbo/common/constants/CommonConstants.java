@@ -516,4 +516,12 @@ public interface CommonConstants {
 
     String PROVIDER_ASYNC_KEY = "PROVIDER_ASYNC";
 
+    String CURRENT_CLUSTER_INVOKER_KEY = "currentClusterInvoker";
+
+    String ENABLE_ROUTER_SNAPSHOT_PRINT_KEY = "ENABLE_ROUTER_SNAPSHOT_PRINT";
+
+    String INJVM_COPY_UTIL_KEY = "injvm-copy-util";
+
+    String INJVM_IGNORE_SAME_MODULE_KEY = "injvm.ignore.same-module";
+
 }
