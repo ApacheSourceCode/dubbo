@@ -14,24 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.dubbo.demo;
+package org.apache.dubbo.validation.support.jvalidation;
 
-import org.apache.dubbo.demo.hello.HelloReply;
-import org.apache.dubbo.demo.hello.HelloRequest;
+import org.apache.dubbo.common.URL;
+import org.apache.dubbo.validation.Validator;
+import org.apache.dubbo.validation.support.AbstractValidation;
 
-import java.util.concurrent.CompletableFuture;
+/**
+ * Creates a new instance of {@link Validator} using input argument url.
+ * @see AbstractValidation
+ * @see Validator
+ */
+public class JValidationNew extends AbstractValidation {
 
-public class GreeterServiceImpl implements GreeterService {
-
+    /**
+     * Return new instance of {@link JValidator}
+     * @param url Valid URL instance
+     * @return Instance of JValidator
+     */
     @Override
-    public HelloReply sayHello(HelloRequest request) {
-        return HelloReply.newBuilder()
-                .setMessage("Hello " + request.getName())
-                .build();
+    protected Validator createValidator(URL url) {
+        return new JValidatorNew(url);
     }
 
-    @Override
-    public CompletableFuture<String> sayHelloAsync(String name) {
-        return CompletableFuture.supplyAsync(() -> name);
-    }
 }
