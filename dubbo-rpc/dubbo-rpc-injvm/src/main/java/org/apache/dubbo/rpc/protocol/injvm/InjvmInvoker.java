@@ -44,7 +44,9 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
+import static org.apache.dubbo.common.constants.CommonConstants.DEFAULT_TIMEOUT;
 import static org.apache.dubbo.common.constants.CommonConstants.LOCALHOST_VALUE;
+import static org.apache.dubbo.common.constants.CommonConstants.TIMEOUT_KEY;
 import static org.apache.dubbo.rpc.Constants.ASYNC_KEY;
 
 /**
@@ -96,6 +98,8 @@ public class InjvmInvoker<T> extends AbstractInvoker<T> {
         if (serverHasToken) {
             invocation.setAttachment(Constants.TOKEN_KEY, serverURL.getParameter(Constants.TOKEN_KEY));
         }
+
+        invocation.setAttachment(TIMEOUT_KEY, invoker.getUrl().getMethodPositiveParameter(invocation.getMethodName(), TIMEOUT_KEY, DEFAULT_TIMEOUT));
 
         String desc = ReflectUtils.getDesc(invocation.getParameterTypes());
 
@@ -158,7 +162,7 @@ public class InjvmInvoker<T> extends AbstractInvoker<T> {
         if(CommonConstants.$INVOKE.equals(methodName) || shouldSkip) {
             // generic invoke, skip copy arguments
             RpcInvocation copiedInvocation = new RpcInvocation(invocation.getTargetServiceUniqueName(),
-                providerServiceModel, methodName, invocation.getServiceName(), invocation.getProtocolServiceKey(),
+                providerServiceModel, methodName, invocation.getInterfaceName(), invocation.getProtocolServiceKey(),
                 invocation.getParameterTypes(), invocation.getArguments(), new HashMap<>(invocation.getObjectAttachments()),
                 invocation.getInvoker(), invocation.getAttributes());
             copiedInvocation.setInvoker(invoker);
@@ -187,7 +191,7 @@ public class InjvmInvoker<T> extends AbstractInvoker<T> {
                 }
 
                 RpcInvocation copiedInvocation = new RpcInvocation(invocation.getTargetServiceUniqueName(),
-                    providerServiceModel, methodName, invocation.getServiceName(), invocation.getProtocolServiceKey(),
+                    providerServiceModel, methodName, invocation.getInterfaceName(), invocation.getProtocolServiceKey(),
                     pts, realArgument, new HashMap<>(invocation.getObjectAttachments()),
                     invocation.getInvoker(), invocation.getAttributes());
                 copiedInvocation.setInvoker(invoker);
